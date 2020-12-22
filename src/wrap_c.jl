@@ -452,6 +452,22 @@ function handle_macro_permissive(ctx::AbstractContext, cursor::CLMacroDefinition
         # const foo = bar(<literal>)
         ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
         return true
+    elseif length(tokenGroups) == 4 &&
+            kind(tokenGroups[1][1]) == CXToken_Identifier && 
+            tokenGroups[2][1].text == "("   
+            kind(tokenGroups[3][1]) == CXToken_Identifier && 
+            tokenGroups[4][1].text == "("
+        id1 = tokenGroups[1][1].text
+        lit1 = mapreduce(t -> t.text, *, tokenGroups[2])
+        id2 = tokenGroups[3][1].text
+        lit2 = mapreduce(t -> t.text, *, tokenGroups[4])
+        exprStr = "const " * id1 * lit1 * " = " * id2 * lit2
+        # @show exprStr
+        target = Meta.parse(exprStr)
+        deps = get_symbols(target)
+        # const foo = bar(<literal>)
+        ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
+        return true
     end
 
     return false

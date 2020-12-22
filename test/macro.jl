@@ -36,4 +36,9 @@ using Test
     foo2_macro = search(cursors, x->name(x)=="FOO2")[1]
     wrap!(ctx, foo2_macro)
     @test ctx.common_buffer[:FOO2].items[1] == :(const FOO2 = (((0 | BAR2) | BAR3) | BAR4) | BAR5)
-  end
+
+    foo3_macro = search(cursors, x->name(x)=="FOO3")[1]
+    wrap!(ctx, foo3_macro)
+    @show ctx.common_buffer[:FOO3].items[1]
+    # @test ctx.common_buffer[:FOO3].items[1] == :(const FOO3(x, y) = BAR6(x, y, x, y))
+end
