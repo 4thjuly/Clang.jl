@@ -27,4 +27,13 @@ using Test
     equals_macro = search(cursors, x->name(x)=="EQUALS_A_B")[1]
     wrap!(ctx, equals_macro)
     @test ctx.common_buffer[:EQUALS_A_B].items[1] == :(const EQUALS_A_B = A == B)
-end
+
+    # Permissive
+    foo1_macro = search(cursors, x->name(x)=="FOO1")[1]
+    wrap!(ctx, foo1_macro)
+    @test ctx.common_buffer[:FOO1].items[1] == :(const FOO1 = bar1(0x1234))
+
+    foo2_macro = search(cursors, x->name(x)=="FOO2")[1]
+    wrap!(ctx, foo2_macro)
+    @test ctx.common_buffer[:FOO2].items[1] == :(const FOO2 = (((0 | BAR2) | BAR3) | BAR4) | BAR5)
+  end

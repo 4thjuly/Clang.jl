@@ -355,6 +355,11 @@ function handle_macro_exprn(tokens::TokenList, pos::Int)
         return txt
     end
 
+    # @info tokens
+    # for i = 1:length(tokens)
+    #     @info tokens[i]
+    # end
+    
     # check whether identifiers and literals alternate
     # with punctuation
     exprn = ""
@@ -375,6 +380,172 @@ function handle_macro_exprn(tokens::TokenList, pos::Int)
     return exprn, pos
 end
 
+function handle_macro_permissive(ctx::AbstractContext, cursor::CLMacroDefinition)::Bool
+    tokens = tokenize(cursor)
+    tokenGroups = []
+    curGroup = []
+    exprn = String[]
+    brackets = 0
+
+    for token in tokens
+        # @show kind(token)
+        # @show token.text
+        
+        if length(curGroup) == 0
+            push!(curGroup, token)
+        elseif kind(curGroup[1]) == CXToken_Identifier && kind(token) == CXToken_Identifier
+            push!(tokenGroups, curGroup)
+            curGroup = []
+            push!(curGroup, token)
+        elseif kind(curGroup[1]) == CXToken_Identifier && token.text == "("
+            brackets += 1
+            push!(tokenGroups, curGroup)
+            curGroup = []
+            push!(curGroup, token)
+        elseif curGroup[1].text == "(" && token.text == ")"
+            push!(curGroup, token)
+            brackets -= 1
+            if brackets == 0
+                push!(tokenGroups, curGroup)
+                curGroup = []
+            end
+        elseif curGroup[1].text == "(" && token.text == "("
+            brackets += 1
+            push!(curGroup, token)
+        else
+            push!(curGroup, token)
+        end
+    end
+    if length(curGroup) != 0
+        push!(tokenGroups, curGroup)
+    end
+
+    # for cGroup = 1:length(tokenGroups)
+    #     group = tokenGroups[cGroup]
+    #     groupStr = mapreduce(t -> t.text, *, group)
+    #     println("Group: $cGroup $groupStr")
+    # end
+
+    if length(tokenGroups) == 2 &&
+            kind(tokenGroups[1][1]) == CXToken_Identifier && 
+            kind(tokenGroups[2][1]) != CXToken_Identifier
+        id1 = tokenGroups[1][1].text
+        lit = mapreduce(t -> t.text, *, tokenGroups[2])
+        exprStr = "const " * id1 * " = " * lit
+        # @show exprStr
+        target = Meta.parse(exprStr)
+        deps = get_symbols(target)
+        # const foo = <literal>
+        ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
+        return true
+    elseif length(tokenGroups) == 3 && 
+            kind(tokenGroups[1][1]) == CXToken_Identifier && 
+            kind(tokenGroups[2][1]) == CXToken_Identifier && 
+            tokenGroups[3][1].text == "("
+        id1 = tokenGroups[1][1].text
+        id2 = tokenGroups[2][1].text
+        lit = mapreduce(t -> t.text, *, tokenGroups[3])
+        exprStr = "const " * id1 * " = " * id2 * lit
+        # @show exprStr
+        target = Meta.parse(exprStr)
+        deps = get_symbols(target)
+        # const foo = bar(<literal>)
+        ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
+        return true
+    end
+
+    return false
+end
+
+# Assume #define foo(...) bar(...) => const foo(..) = bar(...)
+# function handle_macro_func(ctx::AbstractContext, cursor::CLMacroDefinition)
+
+#     # dump(cursor)
+#     tokens = tokenize(cursor)
+#     exprn = String[]
+
+#     for token in tokens
+#         @show kind(token)
+#         @show token.text
+#     end
+
+#     push!(exprn, "const ")
+#     tokenInd = 1
+#     if kind(tokens[tokenInd]) == CXToken_Identifier
+#         push!(exprn, tokens[tokenInd].text)
+#     else 
+#         return
+#     end
+
+#     # @show exprn
+
+#     tokenInd += 1
+#     if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == "("
+#         push!(exprn, "(")
+#     else
+#         return
+#     end
+
+#     # @show exprn
+
+#     tokenInd += 1
+#     while tokenInd <= length(tokens)
+#         if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ")"
+#             push!(exprn, ")")
+#             break
+#         elseif kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ","
+#             push!(exprn, ",")
+#         elseif kind(tokens[tokenInd]) == CXToken_Identifier
+#             push!(exprn, tokens[tokenInd].text)
+#         end
+#         tokenInd += 1
+#     end 
+
+#     push!(exprn, " = ")
+
+#     # @show exprn
+
+#     tokenInd += 1
+#     if kind(tokens[tokenInd]) == CXToken_Identifier
+#         push!(exprn, tokens[tokenInd].text)
+#     else 
+#         return
+#     end
+
+#     # @show exprn
+
+#     tokenInd += 1
+#     if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == "("
+#         push!(exprn, "(")
+#     else
+#         return
+#     end
+
+#     # @show exprn
+
+#     tokenInd += 1
+#     @show length(tokens)
+#     while tokenInd <= length(tokens)
+#         if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ")"
+#             push!(exprn, ")")
+#             break
+#         elseif kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ","
+#             push!(exprn, ",")
+#         elseif kind(tokens[tokenInd]) == CXToken_Identifier
+#             push!(exprn, tokens[tokenInd].text)
+#         end
+#         tokenInd += 1
+#     end 
+    
+#     # @show exprn
+#     buffer = ctx.common_buffer
+#     use_sym = symbol_safe(tokens[1].text)
+#     target = Meta.parse(join(exprn))
+#     deps = get_symbols(target)
+#     # @show join(exprn)
+#     buffer[use_sym] = ExprUnit(target, deps)
+#  end
+
 # TODO: This really returns many more symbols than we want,
 # Functionally, it shouldn't matter, but eventually, we
 # might want something more sophisticated.
@@ -389,47 +560,57 @@ get_symbols(xs::Array) = reduce(vcat, [get_symbols(x) for x in xs])
 Subroutine for handling macro declarations.
 """
 function wrap!(ctx::AbstractContext, cursor::CLMacroDefinition)
-    tokens = tokenize(cursor)
-    # Skip any empty definitions
-    tokens.size < 2 && return ctx
-    startswith(name(cursor), "_") && return ctx
-
-    buffer = ctx.common_buffer
-    pos = 1; exprn = ""
-    if tokens[2].text == "("
-        exprn, pos = handle_macro_exprn(tokens, 3)
-        if pos != lastindex(tokens) || tokens[pos].text != ")" || exprn == ""
-            mdef_str = join([c.text for c in tokens], " ")
-            buffer[Symbol(mdef_str)] = ExprUnit(string("# Skipping MacroDefinition: ", replace(mdef_str, "\n"=>"\n#")))
-            return ctx
-        end
-        exprn = "(" * exprn * ")"
+    if handle_macro_permissive(ctx, cursor)
+         return ctx
     else
-        exprn, pos = handle_macro_exprn(tokens, 2)
-        if pos != lastindex(tokens)
-            mdef_str = join([c.text for c in tokens], " ")
-            buffer[Symbol(mdef_str)] = ExprUnit(string("# Skipping MacroDefinition: ", replace(mdef_str, "\n"=>"#\n")))
-            return ctx
+        tokens = tokenize(cursor)
+        
+        # for token in tokens
+        #     @show kind(token)
+        #     @show token.text
+        # end
+        
+        # Skip any empty definitions
+        tokens.size < 2 && return ctx
+        startswith(name(cursor), "_") && return ctx
+
+        buffer = ctx.common_buffer
+        pos = 1; exprn = ""
+        if tokens[2].text == "("
+            exprn, pos = handle_macro_exprn(tokens, 3)
+            if pos != lastindex(tokens) || tokens[pos].text != ")" || exprn == ""
+                mdef_str = join([c.text for c in tokens], " ")
+                buffer[Symbol(mdef_str)] = ExprUnit(string("# Skipping MacroDefinition: ", replace(mdef_str, "\n"=>"\n#")))
+                return ctx
+            end
+            exprn = "(" * exprn * ")"
+        else
+            exprn, pos = handle_macro_exprn(tokens, 2)
+            if pos != lastindex(tokens)
+                mdef_str = join([c.text for c in tokens], " ")
+                buffer[Symbol(mdef_str)] = ExprUnit(string("# Skipping MacroDefinition: ", replace(mdef_str, "\n"=>"#\n")))
+                return ctx
+            end
+        end
+
+        # Occasionally, skipped definitions slip through
+        (exprn == "" || exprn == "()") && return buffer
+
+        use_sym = symbol_safe(tokens[1].text)
+
+        try
+            target = Meta.parse(exprn)
+            e = Expr(:const, Expr(:(=), use_sym, target))
+            deps = get_symbols(target)
+            buffer[use_sym] = ExprUnit(e, deps)
+        catch err
+            # this assumes all parsing failures are due to string-parsing
+            ## TODO: find a elegant way to solve this
+            e = :(const $use_sym = $(exprn[2:end-1]))
+            buffer[use_sym] = ExprUnit(e,[])
         end
     end
-
-    # Occasionally, skipped definitions slip through
-    (exprn == "" || exprn == "()") && return buffer
-
-    use_sym = symbol_safe(tokens[1].text)
-
-    try
-        target = Meta.parse(exprn)
-        e = Expr(:const, Expr(:(=), use_sym, target))
-        deps = get_symbols(target)
-        buffer[use_sym] = ExprUnit(e, deps)
-    catch err
-        # this assumes all parsing failures are due to string-parsing
-        ## TODO: find a elegant way to solve this
-        e = :(const $use_sym = $(exprn[2:end-1]))
-        buffer[use_sym] = ExprUnit(e,[])
-    end
-
+    
     return ctx
 end
 

@@ -8,3 +8,14 @@ void macro_range(void) {
 }
 
 #define EQUALS_A_B (A == B)
+
+#define FOO1 bar1(0x1234)
+#define FOO2 (0 \
+	| BAR2 \
+	| BAR3 \
+	| BAR4 \
+	| BAR5 \
+    )
+
+// #define FOO3(x) BAR6(x)
+
