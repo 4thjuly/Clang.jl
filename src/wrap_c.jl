@@ -380,12 +380,20 @@ function handle_macro_exprn(tokens::TokenList, pos::Int)
     return exprn, pos
 end
 
-function handle_macro_permissive(ctx::AbstractContext, cursor::CLMacroDefinition)::Bool
+function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::Bool
     tokens = tokenize(cursor)
     tokenGroups = []
     curGroup = []
     exprn = String[]
     brackets = 0
+
+    function tokenGroupsToString(tokenGroups) 
+        s = ""
+        for tokens in tokenGroups
+            s *= " " * mapreduce(t -> t.text, *, tokens)
+        end
+        return s
+    end
 
     for token in tokens
         # @show kind(token)
@@ -422,52 +430,61 @@ function handle_macro_permissive(ctx::AbstractContext, cursor::CLMacroDefinition
 
     # for cGroup = 1:length(tokenGroups)
     #     group = tokenGroups[cGroup]
+    #     firstKind = kind(group[1])
     #     groupStr = mapreduce(t -> t.text, *, group)
-    #     println("Group: $cGroup $groupStr")
+    #     println("Group: $cGroup ($firstKind) $groupStr")
     # end
 
-    if length(tokenGroups) == 2 &&
-            kind(tokenGroups[1][1]) == CXToken_Identifier && 
-            kind(tokenGroups[2][1]) != CXToken_Identifier
-        id1 = tokenGroups[1][1].text
-        lit = mapreduce(t -> t.text, *, tokenGroups[2])
-        exprStr = "const " * id1 * " = " * lit
-        # @show exprStr
-        target = Meta.parse(exprStr)
-        deps = get_symbols(target)
-        # const foo = <literal>
-        ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
-        return true
-    elseif length(tokenGroups) == 3 && 
-            kind(tokenGroups[1][1]) == CXToken_Identifier && 
-            kind(tokenGroups[2][1]) == CXToken_Identifier && 
-            tokenGroups[3][1].text == "("
-        id1 = tokenGroups[1][1].text
-        id2 = tokenGroups[2][1].text
-        lit = mapreduce(t -> t.text, *, tokenGroups[3])
-        exprStr = "const " * id1 * " = " * id2 * lit
-        # @show exprStr
-        target = Meta.parse(exprStr)
-        deps = get_symbols(target)
-        # const foo = bar(<literal>)
-        ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
-        return true
-    elseif length(tokenGroups) == 4 &&
-            kind(tokenGroups[1][1]) == CXToken_Identifier && 
-            tokenGroups[2][1].text == "("   
-            kind(tokenGroups[3][1]) == CXToken_Identifier && 
-            tokenGroups[4][1].text == "("
-        id1 = tokenGroups[1][1].text
-        lit1 = mapreduce(t -> t.text, *, tokenGroups[2])
-        id2 = tokenGroups[3][1].text
-        lit2 = mapreduce(t -> t.text, *, tokenGroups[4])
-        exprStr = "const " * id1 * lit1 * " = " * id2 * lit2
-        # @show exprStr
-        target = Meta.parse(exprStr)
-        deps = get_symbols(target)
-        # const foo = bar(<literal>)
-        ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
-        return true
+    try
+        if length(tokenGroups) == 2 &&
+                kind(tokenGroups[1][1]) == CXToken_Identifier && 
+                kind(tokenGroups[2][1]) != CXToken_Identifier
+            id1 = tokenGroups[1][1].text
+            lit = mapreduce(t -> t.text, *, tokenGroups[2])
+            exprStr = "const " * id1 * " = " * lit
+            # @show exprStr
+            target = Meta.parse(exprStr)
+            deps = get_symbols(target)
+            # const foo = <literal>
+            ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
+            return true
+        elseif length(tokenGroups) == 3 && 
+                kind(tokenGroups[1][1]) == CXToken_Identifier && 
+                kind(tokenGroups[2][1]) == CXToken_Identifier && 
+                tokenGroups[3][1].text == "("
+            id1 = tokenGroups[1][1].text
+            id2 = tokenGroups[2][1].text
+            lit = mapreduce(t -> t.text, *, tokenGroups[3])
+            exprStr = "const " * id1 * " = " * id2 * lit
+            # @show exprStr
+            target = Meta.parse(exprStr)
+            deps = get_symbols(target)
+            # const foo = bar(<literal>)
+            ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
+            return true
+        elseif length(tokenGroups) == 4 &&
+                kind(tokenGroups[1][1]) == CXToken_Identifier && 
+                tokenGroups[2][1].text == "("   
+                kind(tokenGroups[3][1]) == CXToken_Identifier && 
+                tokenGroups[4][1].text == "("
+            id1 = tokenGroups[1][1].text
+            lit1 = mapreduce(t -> t.text, *, tokenGroups[2])
+            id2 = tokenGroups[3][1].text
+            lit2 = mapreduce(t -> t.text, *, tokenGroups[4])
+            exprStr = "const " * id1 * lit1 * " = " * id2 * lit2
+            # @show exprStr
+            target = Meta.parse(exprStr)
+            deps = get_symbols(target)
+            # const foo = bar(<literal>)
+            ctx.common_buffer[symbol_safe(id1) ] = ExprUnit(target, deps)
+            return true
+        else
+            s = tokenGroupsToString(tokenGroups)
+            @info "Not able to simple-wrap: $s" 
+        end
+    catch exc
+         s = tokenGroupsToString(tokenGroups)
+        @info "Exception, not able to simple-wrap: $s"
     end
 
     return false
@@ -576,7 +593,7 @@ get_symbols(xs::Array) = reduce(vcat, [get_symbols(x) for x in xs])
 Subroutine for handling macro declarations.
 """
 function wrap!(ctx::AbstractContext, cursor::CLMacroDefinition)
-    if handle_macro_permissive(ctx, cursor)
+    if handle_macro_simple(ctx, cursor)
          return ctx
     else
         tokens = tokenize(cursor)
