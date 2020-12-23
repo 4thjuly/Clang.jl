@@ -395,11 +395,6 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
         return s
     end
 
-    function legal_id(id::String)::Bool
-        if id[1] == '&' return false end
-        return true
-    end
-
     function legal_id(ids...)::Bool
         for id in ids 
             if id[1] == '&' return false end
@@ -448,9 +443,9 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
     # end
 
     try
-        if length(tokenGroups) == 2 &&
+        if (length(tokenGroups) == 2 &&
                 kind(tokenGroups[1][1]) == CXToken_Identifier && 
-                kind(tokenGroups[2][1]) != CXToken_Identifier
+                kind(tokenGroups[2][1]) != CXToken_Identifier)
             id1 = tokenGroups[1][1].text
             if !legal_id(id1) return false end
             lit = mapreduce(t -> t.text, *, tokenGroups[2])
@@ -461,10 +456,10 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
             # const foo = <literal>
             ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
             return true
-        elseif length(tokenGroups) == 3 && 
+        elseif (length(tokenGroups) == 3 && 
                 kind(tokenGroups[1][1]) == CXToken_Identifier && 
                 kind(tokenGroups[2][1]) == CXToken_Identifier && 
-                tokenGroups[3][1].text == "("
+                tokenGroups[3][1].text == "(")
             id1 = tokenGroups[1][1].text
             id2 = tokenGroups[2][1].text
             if !legal_id(id1, id2) return false end
@@ -476,11 +471,11 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
             # const foo = bar(<literal>)
             ctx.common_buffer[symbol_safe(id1)] = ExprUnit(target, deps)
             return true
-        elseif length(tokenGroups) == 4 &&
+        elseif (length(tokenGroups) == 4 &&
                 kind(tokenGroups[1][1]) == CXToken_Identifier && 
-                tokenGroups[2][1].text == "("   
+                tokenGroups[2][1].text == "(" &&  
                 kind(tokenGroups[3][1]) == CXToken_Identifier && 
-                tokenGroups[4][1].text == "("
+                tokenGroups[4][1].text == "(")
             id1 = tokenGroups[1][1].text
             lit1 = mapreduce(t -> t.text, *, tokenGroups[2])
             id2 = tokenGroups[3][1].text
@@ -504,95 +499,6 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
 
     return false
 end
-
-# Assume #define foo(...) bar(...) => const foo(..) = bar(...)
-# function handle_macro_func(ctx::AbstractContext, cursor::CLMacroDefinition)
-
-#     # dump(cursor)
-#     tokens = tokenize(cursor)
-#     exprn = String[]
-
-#     for token in tokens
-#         @show kind(token)
-#         @show token.text
-#     end
-
-#     push!(exprn, "const ")
-#     tokenInd = 1
-#     if kind(tokens[tokenInd]) == CXToken_Identifier
-#         push!(exprn, tokens[tokenInd].text)
-#     else 
-#         return
-#     end
-
-#     # @show exprn
-
-#     tokenInd += 1
-#     if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == "("
-#         push!(exprn, "(")
-#     else
-#         return
-#     end
-
-#     # @show exprn
-
-#     tokenInd += 1
-#     while tokenInd <= length(tokens)
-#         if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ")"
-#             push!(exprn, ")")
-#             break
-#         elseif kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ","
-#             push!(exprn, ",")
-#         elseif kind(tokens[tokenInd]) == CXToken_Identifier
-#             push!(exprn, tokens[tokenInd].text)
-#         end
-#         tokenInd += 1
-#     end 
-
-#     push!(exprn, " = ")
-
-#     # @show exprn
-
-#     tokenInd += 1
-#     if kind(tokens[tokenInd]) == CXToken_Identifier
-#         push!(exprn, tokens[tokenInd].text)
-#     else 
-#         return
-#     end
-
-#     # @show exprn
-
-#     tokenInd += 1
-#     if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == "("
-#         push!(exprn, "(")
-#     else
-#         return
-#     end
-
-#     # @show exprn
-
-#     tokenInd += 1
-#     @show length(tokens)
-#     while tokenInd <= length(tokens)
-#         if kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ")"
-#             push!(exprn, ")")
-#             break
-#         elseif kind(tokens[tokenInd]) == CXToken_Punctuation && tokens[tokenInd].text == ","
-#             push!(exprn, ",")
-#         elseif kind(tokens[tokenInd]) == CXToken_Identifier
-#             push!(exprn, tokens[tokenInd].text)
-#         end
-#         tokenInd += 1
-#     end 
-    
-#     # @show exprn
-#     buffer = ctx.common_buffer
-#     use_sym = symbol_safe(tokens[1].text)
-#     target = Meta.parse(join(exprn))
-#     deps = get_symbols(target)
-#     # @show join(exprn)
-#     buffer[use_sym] = ExprUnit(target, deps)
-#  end
 
 # TODO: This really returns many more symbols than we want,
 # Functionally, it shouldn't matter, but eventually, we

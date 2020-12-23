@@ -40,4 +40,5 @@ using Test
     foo3_macro = search(cursors, x->name(x)=="FOO3")[1]
     wrap!(ctx, foo3_macro)
     @test repr(ctx.common_buffer[:FOO3].items[1]) == ":(const FOO3(x, y) = begin\n              #= none:1 =#\n              BAR6(x, y, x, y)\n          end)"
+
 end
