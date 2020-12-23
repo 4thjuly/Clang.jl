@@ -395,6 +395,18 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
         return s
     end
 
+    function legal_id(id::String)::Bool
+        if id[1] == '&' return false end
+        return true
+    end
+
+    function legal_id(ids...)::Bool
+        for id in ids 
+            if id[1] == '&' return false end
+        end
+        return true
+    end
+
     for token in tokens
         # @show kind(token)
         # @show token.text
@@ -430,7 +442,7 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
 
     # for cGroup = 1:length(tokenGroups)
     #     group = tokenGroups[cGroup]
-    #     firstKind = kind(group[1])
+    #     firstKind = kind(group[1]) 
     #     groupStr = mapreduce(t -> t.text, *, group)
     #     println("Group: $cGroup ($firstKind) $groupStr")
     # end
@@ -440,6 +452,7 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
                 kind(tokenGroups[1][1]) == CXToken_Identifier && 
                 kind(tokenGroups[2][1]) != CXToken_Identifier
             id1 = tokenGroups[1][1].text
+            if !legal_id(id1) return false end
             lit = mapreduce(t -> t.text, *, tokenGroups[2])
             exprStr = "const " * id1 * " = " * lit
             # @show exprStr
@@ -454,6 +467,7 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
                 tokenGroups[3][1].text == "("
             id1 = tokenGroups[1][1].text
             id2 = tokenGroups[2][1].text
+            if !legal_id(id1, id2) return false end
             lit = mapreduce(t -> t.text, *, tokenGroups[3])
             exprStr = "const " * id1 * " = " * id2 * lit
             # @show exprStr
@@ -471,6 +485,7 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
             lit1 = mapreduce(t -> t.text, *, tokenGroups[2])
             id2 = tokenGroups[3][1].text
             lit2 = mapreduce(t -> t.text, *, tokenGroups[4])
+            if !legal_id(id1, id2) return false end 
             exprStr = "const " * id1 * lit1 * " = " * id2 * lit2
             # @show exprStr
             target = Meta.parse(exprStr)
@@ -479,12 +494,12 @@ function handle_macro_simple(ctx::AbstractContext, cursor::CLMacroDefinition)::B
             ctx.common_buffer[symbol_safe(id1) ] = ExprUnit(target, deps)
             return true
         else
-            s = tokenGroupsToString(tokenGroups)
-            @info "Not able to simple-wrap: $s" 
+            # s = tokenGroupsToString(tokenGroups)
+            # @info "Not able to simple-wrap: $s" 
         end
     catch exc
-         s = tokenGroupsToString(tokenGroups)
-        @info "Exception, not able to simple-wrap: $s"
+        #  s = tokenGroupsToString(tokenGroups)
+        # @info "Exception, not able to simple-wrap: $s"
     end
 
     return false
